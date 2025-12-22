@@ -1,33 +1,38 @@
 // src/types/problem.ts
 
-export interface TestExample {
-  input: string;
-  output: string;
-  explanation?: string; // Opcional, pois nem sempre tem
-}
-
-export interface Subtask {
+export interface SubtaskMetadata {
   id: number;
   score: number;
-  description: string; // Ex: "N <= 100"
+  description: string;
+}
+
+export interface ProblemExample {
+  input: string;
+  output: string;
+  explanation?: string | null;
 }
 
 export interface Problem {
-  id?: string; // Gerado pelo Firebase
-  slug: string; // Identificador único para URL (ex: 'torre-de-hanoi')
+  id: string; // Slug
   title: string;
   year: number;
-  level: 'Iniciante' | 'Nível 1' | 'Nível 2' | 'Sênior';
-  phase: 'Fase 1' | 'Fase 2' | 'Fase 3';
+  level: string;
+  phase: number;
+  time_limit: number;
+  statement: string;
+  input_format: string;
+  output_format: string;
+  constraints: string;
   
-  // Conteúdo (Geralmente em Markdown para suportar matemática/código)
-  statement: string;      // Enunciado
-  inputFormat: string;    // Especificação de Entrada
-  outputFormat: string;   // Especificação de Saída
-  constraints: string;    // Restrições gerais
-  
-  subtasks?: Subtask[];   // Array opcional, pois nem toda questão tem subtasks explícitas
-  examples: TestExample[];
-  
-  createdAt: Date;
+  subtasks: SubtaskMetadata[]; 
+  examples: ProblemExample[];
+}
+
+export interface TestCase {
+  id: string;
+  input: string;
+  output: string;
+  subtask_id: number;
+  is_hidden: boolean;
+  order: number; // <--- NOVO CAMPO
 }

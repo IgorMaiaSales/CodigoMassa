@@ -4,6 +4,7 @@
   /* --- CORES (Brand) --- */
   /* O Tailwind v4 gera automaticamente as classes bg-brand-dark, text-brand-surface, etc. */
   --color-brand-dark: #0F1A18;
+  --color-brand-panel: #13201E;
   --color-brand-surface: #182B27;
   --color-brand-green: #3A7D63;
   --color-brand-green-light: #6BBF99;  /* Nome com traço é importante */
