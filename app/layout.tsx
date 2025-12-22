@@ -2,6 +2,9 @@ import type { Metadata } from "next";
 import { Plus_Jakarta_Sans, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
+// 1. Importe o AuthProvider que criamos (certifique-se de ter criado o arquivo AuthContext.tsx antes)
+import { AuthProvider } from "@/lib/contexts/AuthContext";
+
 const plusJakarta = Plus_Jakarta_Sans({ 
   subsets: ["latin"], 
   variable: "--font-plus-jakarta",
@@ -33,7 +36,10 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${plusJakarta.variable} ${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-brand-dark text-brand-text`}>
-        {children}
+        {/* 2. Envolva o children com o AuthProvider */}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );
