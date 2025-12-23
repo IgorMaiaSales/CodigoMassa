@@ -6,6 +6,7 @@ import { LogOut, LayoutGrid, List, Trophy, BookOpen, Menu, X, LogIn } from 'luci
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { auth } from '@/lib/firebase'; 
 import { HorizontalLogo } from './Logo';
+import Link from 'next/link';
 
 export default function Navbar() {
   const router = useRouter(); 
@@ -52,8 +53,10 @@ export default function Navbar() {
   return (
     <nav className="relative sticky top-0 z-50 w-full h-20 bg-[#0F1A18]/90 backdrop-blur-md border-b border-[#2A453F] px-6 lg:px-12 flex items-center justify-between">
       
-      {/* LOGO */}
-      <HorizontalLogo className="cursor-pointer" onClick={() => router.push('/')} />
+      {/* LOGO - Agora envolta em Link para navegação segura */}
+      <Link href="/" className="cursor-pointer hover:opacity-80 transition-opacity" title="Voltar ao início">
+        <HorizontalLogo />
+      </Link>
 
       {/* MENU CENTRAL (DESKTOP) */}
       <div className="hidden md:flex absolute left-1/2 top-1/2 transform -translate-x-1/2 -translate-y-1/2 items-center gap-1">

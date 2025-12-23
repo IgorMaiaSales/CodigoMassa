@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateUserWithEmailAndPassword, useUpdateProfile } from 'react-firebase-hooks/auth';
 import { auth } from '@/lib/firebase';
+import { sendEmailVerification } from 'firebase/auth';
 
 export default function RegisterForm() {
     const router = useRouter();
@@ -63,16 +64,20 @@ export default function RegisterForm() {
         }
         
         try {
-            const res = await createUserWithEmailAndPassword(email, password);
-            
-            if (res) {
-                const success = await updateProfile({ displayName: name });
-                if (success) {
-                    router.push('/dashboard');
-                }
-            }
+          const res = await createUserWithEmailAndPassword(email, password);
+          
+          if (res) {
+              await updateProfile({ displayName: name });
+              
+              // NOVO: Enviar e-mail de verificação
+              await sendEmailVerification(res.user);
+
+              // MUDANÇA: Redirecionar para a página de espera, não para o dashboard
+              router.push('/verify-email');
+          }
         } catch (err) {
             console.error("Erro no registro:", err);
+            // O tratamento de erro continua o mesmo
         }
     };
 

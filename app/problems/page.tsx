@@ -3,6 +3,7 @@
 import React from 'react';
 import Navbar from '@/components/Navbar'; // Ajuste o caminho conforme sua estrutura de pastas
 import ProblemExplorer from './explorer'; // Ajuste o caminho
+import Footer from '@/components/Footer';
 
 export default function ProblemsPage() {
   return (
@@ -23,6 +24,8 @@ export default function ProblemsPage() {
         <ProblemExplorer />
         
       </main>
+
+      <Footer /> 
     </div>
   );
 }
