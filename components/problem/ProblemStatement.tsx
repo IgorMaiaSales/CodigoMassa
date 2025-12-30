@@ -34,9 +34,14 @@ export default function ProblemStatement({ problem }: ProblemStatementProps) {
             </span>
             
             {/* Nível por Extenso */}
-            <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-brand-green/20 text-brand-green-light border border-brand-green/50">
-              {formatLevel(problem.level)}
-            </span>
+            {problem.level.map((lvl) => (
+              <span 
+                key={lvl} 
+                className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-brand-green/20 text-brand-green-light border border-brand-green/50"
+              >
+                {formatLevel(lvl)}
+              </span>
+            ))}
 
              <span className="px-3 py-1 rounded-full text-xs font-bold font-mono bg-brand-surface border border-brand-border text-brand-muted">
               Fase {problem.phase}
