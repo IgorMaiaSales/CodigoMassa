@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from 'react';
 import { Search, Filter, ChevronDown, CheckCircle, CircleDashed } from 'lucide-react';
 import Link from 'next/link';
-import { Problem } from '@/types/problem';
+import { ProblemSummary } from '@/types/problem';
 
 export default function ProblemExplorer() {
-  const [problems, setProblems] = useState<Problem[]>([]);
+  const [problems, setProblems] = useState<ProblemSummary[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Estados dos Filtros
@@ -51,7 +51,7 @@ export default function ProblemExplorer() {
     return prob.title.toLowerCase().includes(term);
   });
 
-  const formatLevel = (levelCode: string) => {
+  const formatLevel = (levels: string[]) => {
     const map: Record<string, string> = {
       'J': 'Júnior',
       '1': 'Nível 1',
@@ -59,7 +59,13 @@ export default function ProblemExplorer() {
       'S': 'Sênior',
       'Iniciante': 'Iniciante'
     };
-    return map[levelCode] || levelCode;
+    
+    // Se por acaso vier null ou undefined (proteção)
+    if (!levels || !Array.isArray(levels)) return 'Nível desconhecido';
+
+    // Mapeia cada código do array para o nome e junta com " / "
+    // Exemplo: ["2", "S"] vira "Nível 2 / Sênior"
+    return levels.map(l => map[l] || l).join(' / ');
   };
 
   const getScoreBadge = (score: number | null, status: string) => {

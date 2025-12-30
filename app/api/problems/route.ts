@@ -39,7 +39,7 @@ export async function GET(request: Request) {
 
     // Filtros de Ano e Nível (Mantidos)
     if (year && year !== 'Todos') query = query.where('year', '==', parseInt(year));
-    if (level && level !== 'Todos') query = query.where('level', '==', level);
+    if (level && level !== 'Todos') query = query.where('level', 'array-contains', level);
 
     const snapshot = await query.get();
     
@@ -56,7 +56,17 @@ export async function GET(request: Request) {
       console.log('❌ Nenhum documento retornado na consulta final.');
     }
 
-    const problems = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Problem[];
+    const problems = snapshot.docs.map(doc => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        title: data.title,
+        year: data.year,
+        level: data.level, // Lembre-se que agora é um array string[]
+        phase: data.phase
+      };
+    });
+    
     return NextResponse.json(problems);
 
   } catch (error) {
