@@ -1,12 +1,15 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ChevronDown, CheckCircle, CircleDashed } from 'lucide-react';
+import { Search, Filter, ChevronDown, CheckCircle, CircleDashed, AlertTriangle, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { ProblemSummary } from '@/types/problem';
+import { useAuth } from '@/lib/contexts/AuthContext';
 
 export default function ProblemExplorer() {
+  const { user } = useAuth();
   const [problems, setProblems] = useState<ProblemSummary[]>([]);
+  const [userProgress, setUserProgress] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
 
   // Estados dos Filtros
@@ -24,16 +27,21 @@ export default function ProblemExplorer() {
         
         if (filterYear !== 'Todos') params.append('year', filterYear);
         if (filterLevel !== 'Todos') params.append('level', filterLevel);
-        
-        // SIMPLIFICADO: Como os valores do select já são "1", "2", "3",
-        // não precisamos fazer replace/regex. Basta enviar direto.
         if (filterPhase !== 'Todos') params.append('phase', filterPhase);
         
-        const res = await fetch(`/api/problems?${params.toString()}`);
-        if (!res.ok) throw new Error('Falha ao buscar problemas');
+        const probRes = await fetch(`/api/problems?${params.toString()}`);
+        if (!probRes.ok) throw new Error('Falha ao buscar problemas');
         
-        const data = await res.json();
-        setProblems(data);
+        const probData = await probRes.json();
+        setProblems(probData);
+
+        if (user?.uid) {
+            const userRes = await fetch(`/api/user/submissions?uid=${user.uid}`);
+            if (userRes.ok) {
+                const progressData = await userRes.json();
+                setUserProgress(progressData);
+            }
+        }
       } catch (error) {
         console.error("Erro ao buscar problemas", error);
         setProblems([]);
@@ -43,7 +51,7 @@ export default function ProblemExplorer() {
     }; 
 
     fetchProblems(); 
-  }, [filterYear, filterLevel, filterPhase]); 
+  }, [filterYear, filterLevel, filterPhase, user?.uid]); 
 
   // --- FILTRAGEM LOCAL (Apenas Texto) ---
   const filteredProblems = problems.filter(prob => {
@@ -68,16 +76,47 @@ export default function ProblemExplorer() {
     return levels.map(l => map[l] || l).join(' / ');
   };
 
-  const getScoreBadge = (score: number | null, status: string) => {
-    if (status === 'pending') {
+  const getScoreBadge = (problemId: string) => {
+    const submission = userProgress[problemId];
+
+    // Caso 1: Não tentado (Sem registro)
+    if (!submission) {
       return (
-        <div className="flex items-center gap-2 text-[#8CA69E] opacity-60">
+        <div className="flex items-center gap-2 text-[#8CA69E] opacity-40">
           <CircleDashed size={18} />
-          <span className="text-sm font-medium">Não tentado</span>
+          <span className="text-xs font-medium hidden md:inline">Não tentado</span>
         </div>
       );
     }
-    return null; 
+
+    // Caso 2: Aceito (100% da nota)
+    if (submission.status === 'Accepted') {
+        return (
+            <div className="flex items-center gap-2 text-brand-green-light bg-brand-green/10 px-3 py-1 rounded-full border border-brand-green/20">
+                <CheckCircle size={16} />
+                <span className="text-sm font-bold">{submission.score} pts</span>
+            </div>
+        );
+    }
+
+    // Caso 3: Parcial ou Erro
+    // Se tiver pontuação > 0 mas não é Accepted, é Parcial
+    if (submission.score > 0) {
+        return (
+            <div className="flex items-center gap-2 text-brand-yellow bg-brand-yellow/10 px-3 py-1 rounded-full border border-brand-yellow/20">
+                <AlertTriangle size={16} />
+                <span className="text-sm font-bold">{submission.score} pts</span>
+            </div>
+        );
+    }
+
+    // Caso 4: Erro (0 pontos)
+    return (
+        <div className="flex items-center gap-2 text-brand-error bg-brand-error/10 px-3 py-1 rounded-full border border-brand-error/20">
+            <XCircle size={16} />
+            <span className="text-sm font-bold">0 pts</span>
+        </div>
+    );
   };
 
   return (
@@ -189,7 +228,7 @@ export default function ProblemExplorer() {
                           <div className="col-span-2 hidden md:block text-center text-sm text-[#EAEAEA]">Fase {prob.phase}</div>
 
                           <div className="col-span-7 md:col-span-2 flex justify-end">
-                              {getScoreBadge(null, 'pending')}
+                              {getScoreBadge(prob.id)}
                           </div>
                       </Link>
                   ))

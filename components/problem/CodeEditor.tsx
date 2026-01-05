@@ -128,7 +128,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
           slug: problemSlug,
           source_code: code,
           language_id: selectedLang.id,
-          user_uid: user.uid 
+          uid: user?.uid 
         })
       });
 
