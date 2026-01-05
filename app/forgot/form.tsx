@@ -18,7 +18,7 @@ export default function ForgotForm() {
             // URL para onde o usuário volta após clicar no email.
             // Ajuste 'http://localhost:3000' para seu domínio em produção.
             const actionCodeSettings = {
-                url: 'http://localhost:3000/reset-password',
+                url: `${window.location.origin}/reset-password`,
                 handleCodeInApp: true,
             };
 

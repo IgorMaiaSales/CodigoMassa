@@ -68,9 +68,17 @@ export default function RegisterForm() {
           
           if (res) {
               await updateProfile({ displayName: name });
+
+              // Define a URL para onde o usuário deve ir após clicar no link do e-mail
+              const actionCodeSettings = {
+                // URL para redirecionamento após a verificação. 
+                // O Firebase adicionará parâmetros query a essa URL.
+                url: `${window.location.origin}/verify-email`, 
+                handleCodeInApp: true,
+              };
               
               // NOVO: Enviar e-mail de verificação
-              await sendEmailVerification(res.user);
+              await sendEmailVerification(res.user, actionCodeSettings);
 
               // MUDANÇA: Redirecionar para a página de espera, não para o dashboard
               router.push('/check-email');
