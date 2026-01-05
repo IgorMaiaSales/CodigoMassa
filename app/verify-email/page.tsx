@@ -20,7 +20,7 @@ function VerifyEmailForm() {
 
     useEffect(() => {
         // Se não houver código, ou se o modo não for verificar email (segurança extra)
-        if (!oobCode || mode !== 'verifyEmail') {
+        if (!oobCode) {
             setStatus('error');
             setErrorMessage('Link inválido ou mal formatado.');
             return;
