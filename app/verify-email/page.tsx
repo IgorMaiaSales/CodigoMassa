@@ -1,98 +1,107 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useAuthState } from 'react-firebase-hooks/auth';
+import { useState, useEffect, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { applyActionCode } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { sendEmailVerification, signOut } from 'firebase/auth';
-import { useRouter } from 'next/navigation';
-import { Logo } from '@/components/Logo'; // Assumindo que você tem esse componente
+import { Logo } from '@/components/Logo'; // Certifique-se que o caminho está correto
+import Link from 'next/link';
+
+function VerifyEmailForm() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
+    
+    // O Firebase envia o código no parâmetro 'oobCode' e o modo no 'mode'
+    const oobCode = searchParams.get('oobCode');
+    const mode = searchParams.get('mode');
+
+    const [status, setStatus] = useState<'verifying' | 'success' | 'error'>('verifying');
+    const [errorMessage, setErrorMessage] = useState('');
+
+    useEffect(() => {
+        // Se não houver código, ou se o modo não for verificar email (segurança extra)
+        if (!oobCode || mode !== 'verifyEmail') {
+            setStatus('error');
+            setErrorMessage('Link inválido ou mal formatado.');
+            return;
+        }
+
+        // Executa a verificação
+        applyActionCode(auth, oobCode)
+            .then(() => {
+                setStatus('success');
+                // Opcional: Redirecionar automaticamente após alguns segundos
+                setTimeout(() => router.push('/login'), 4000);
+            })
+            .catch((error) => {
+                console.error("Erro na verificação:", error);
+                let msg = "Ocorreu um erro ao verificar seu email.";
+                
+                // Tratamento de erros comuns do Firebase
+                if (error.code === 'auth/expired-action-code') {
+                    msg = "Este link expirou. Por favor, solicite um novo.";
+                } else if (error.code === 'auth/invalid-action-code') {
+                    msg = "Este link já foi usado ou é inválido.";
+                } else if (error.code === 'auth/user-disabled') {
+                    msg = "O usuário correspondente foi desativado.";
+                }
+                
+                setStatus('error');
+                setErrorMessage(msg);
+            });
+    }, [oobCode, mode, router]);
+
+    // --- Renderização dos Estados ---
+
+    if (status === 'verifying') {
+        return (
+            <div className="text-center space-y-4">
+                <div className="animate-pulse text-[#3A7D63] text-5xl mb-2">⏳</div>
+                <h2 className="text-xl font-bold text-[#EAEAEA]">Verificando...</h2>
+                <p className="text-[#8CA69E]">Estamos validando seu email no sistema.</p>
+            </div>
+        );
+    }
+
+    if (status === 'error') {
+        return (
+            <div className="text-center space-y-4">
+                <div className="text-[#CF5C5C] text-5xl mb-2">⚠️</div>
+                <h2 className="text-xl font-bold text-[#EAEAEA]">Falha na Verificação</h2>
+                <p className="text-[#8CA69E]">{errorMessage}</p>
+                {/* Aqui você pode adicionar um botão para reenviar o email se tiver essa lógica implementada */}
+                <Link href="/login" className="block w-full py-3 bg-[#2A453F] hover:bg-[#3A7D63] text-white rounded-lg transition-colors">
+                    Voltar para Login
+                </Link>
+            </div>
+        );
+    }
+
+    // Status === 'success'
+    return (
+        <div className="text-center space-y-4">
+            <div className="text-[#3A7D63] text-5xl mb-2">✅</div>
+            <h2 className="text-xl font-bold text-[#EAEAEA]">Email Verificado!</h2>
+            <p className="text-[#8CA69E]">Sua conta foi ativada com sucesso. Você será redirecionado para o login.</p>
+            <Link href="/login" className="block text-[#3A7D63] hover:underline font-bold">
+                Ir para Login agora
+            </Link>
+        </div>
+    );
+}
 
 export default function VerifyEmailPage() {
-  const [user, loading] = useAuthState(auth);
-  const [emailSent, setEmailSent] = useState(false);
-  const router = useRouter();
-
-  // Se não tiver usuário logado, manda pro login
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
-
-  // Função para checar se o usuário já verificou (pode ser chamado por um botão)
-  const checkVerification = async () => {
-    if (user) {
-      await user.reload(); // Atualiza os dados do usuário do Firebase
-      if (user.emailVerified) {
-        router.push('/problems');
-      } else {
-        alert('E-mail ainda não verificado. Verifique sua caixa de entrada.');
-      }
-    }
-  };
-
-  const resendEmail = async () => {
-    if (user) {
-      try {
-        await sendEmailVerification(user);
-        setEmailSent(true);
-        setTimeout(() => setEmailSent(false), 5000); // Reseta mensagem após 5s
-      } catch (error) {
-        console.error("Erro ao reenviar:", error);
-      }
-    }
-  };
-
-  const handleLogout = () => {
-    signOut(auth);
-    router.push('/login');
-  };
-
-  if (loading) return <div className="min-h-screen bg-[#0F1A18] flex items-center justify-center text-[#8CA69E]">Carregando...</div>;
-
-  return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-[#0F1A18] p-4 text-[#EAEAEA]">
-      <div className="w-full max-w-md space-y-8 bg-[#13201E] p-8 rounded-xl border border-[#2A453F] shadow-2xl">
-        
-        <div className="text-center">
-            {/* Ícone de Email */}
-            <div className="mx-auto h-16 w-16 bg-[#3A7D63]/20 rounded-full flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#3A7D63" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <rect width="20" height="16" x="2" y="4" rx="2"/>
-                    <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>
-                </svg>
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-[#0F1A18] p-4 font-sans">
+            <div className="mb-8">
+                {/* Se o componente Logo não puder ser importado, remova ou substitua por <h1> */}
+                <Logo /> 
             </div>
-            
-            <h2 className="text-2xl font-bold mb-2">Verifique seu e-mail</h2>
-            <p className="text-[#8CA69E]">
-              Enviamos um link de confirmação para <br/>
-              <span className="text-[#EAEAEA] font-mono">{user?.email}</span>
-            </p>
+            <div className="w-full max-w-md bg-[#13201E] p-8 rounded-xl border border-[#2A453F] shadow-2xl flex flex-col items-center">
+                <Suspense fallback={<div className="text-[#8CA69E]">Carregando...</div>}>
+                    <VerifyEmailForm />
+                </Suspense>
+            </div>
         </div>
-
-        <div className="space-y-4">
-            <button
-                onClick={checkVerification}
-                className="w-full py-3 px-4 bg-[#3A7D63] hover:bg-[#6BBF99] text-white font-bold rounded-lg transition-all transform hover:-translate-y-0.5"
-            >
-                Já verifiquei meu e-mail
-            </button>
-
-            <button
-                onClick={resendEmail}
-                disabled={emailSent}
-                className="w-full py-3 px-4 bg-transparent border border-[#2A453F] text-[#8CA69E] hover:text-[#EAEAEA] hover:border-[#8CA69E] rounded-lg transition-colors"
-            >
-                {emailSent ? 'E-mail reenviado!' : 'Reenviar e-mail'}
-            </button>
-        </div>
-
-        <div className="text-center pt-4 border-t border-[#2A453F]">
-            <button onClick={handleLogout} className="text-sm text-[#CF5C5C] hover:underline">
-                Sair / Entrar com outra conta
-            </button>
-        </div>
-      </div>
-    </div>
-  );
+    );
 }

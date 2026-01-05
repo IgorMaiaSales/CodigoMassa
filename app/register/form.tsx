@@ -73,7 +73,7 @@ export default function RegisterForm() {
               await sendEmailVerification(res.user);
 
               // MUDANÇA: Redirecionar para a página de espera, não para o dashboard
-              router.push('/verify-email');
+              router.push('/check-email');
           }
         } catch (err) {
             console.error("Erro no registro:", err);
