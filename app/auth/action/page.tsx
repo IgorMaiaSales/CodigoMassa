@@ -8,7 +8,7 @@ function AuthActionHandler() {
   const searchParams = useSearchParams();
   
   useEffect(() => {
-    // O Firebase envia o parâmetro 'mode' e 'oobCode' na URL
+    // O Firebase envia os parâmetros 'mode', 'apiKey' e 'oobCode' na URL
     const mode = searchParams.get('mode'); 
     const oobCode = searchParams.get('oobCode');
     const apiKey = searchParams.get('apiKey');
@@ -21,13 +21,13 @@ function AuthActionHandler() {
     // Monta a query string para preservar o código
     const query = `?oobCode=${oobCode}&apiKey=${apiKey}`;
 
-    // O "Guarda de Trânsito" decide para onde ir
+    // Redireciona baseado no modo
     switch (mode) {
       case 'resetPassword':
         router.replace(`/reset-password${query}`);
         break;
       case 'verifyEmail':
-        router.replace(`/verify-email${query}`); // Ou sua página de verificação
+        router.replace(`/verify-email${query}`);
         break;
       default:
         router.push('/login');

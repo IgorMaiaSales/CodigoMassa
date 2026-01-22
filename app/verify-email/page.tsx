@@ -4,14 +4,14 @@ import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { applyActionCode } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
-import { Logo } from '@/components/Logo'; // Certifique-se que o caminho está correto
+import { Logo } from '@/components/Logo';
 import Link from 'next/link';
 
 function VerifyEmailForm() {
     const searchParams = useSearchParams();
     const router = useRouter();
     
-    // O Firebase envia o código no parâmetro 'oobCode' e o modo no 'mode'
+    // O Firebase envia o código no parâmetro 'oobCode'
     const oobCode = searchParams.get('oobCode');
     const mode = searchParams.get('mode');
 
@@ -19,7 +19,7 @@ function VerifyEmailForm() {
     const [errorMessage, setErrorMessage] = useState('');
 
     useEffect(() => {
-        // Se não houver código, ou se o modo não for verificar email (segurança extra)
+        // Se não houver código, erro imediato
         if (!oobCode) {
             setStatus('error');
             setErrorMessage('Link inválido ou mal formatado.');
@@ -30,7 +30,7 @@ function VerifyEmailForm() {
         applyActionCode(auth, oobCode)
             .then(() => {
                 setStatus('success');
-                // Opcional: Redirecionar automaticamente após alguns segundos
+                // Redirecionar automaticamente após alguns segundos
                 setTimeout(() => router.push('/login'), 4000);
             })
             .catch((error) => {

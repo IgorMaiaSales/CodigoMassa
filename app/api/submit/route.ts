@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 // Instância Pública do Judge0
 const JUDGE0_URL = 'https://ce.judge0.com'; 
 
-// CONFIGURAÇÃO DE LOTES
-// A API pública é instável. Enviar 5 a 10 por vez é seguro.
+// Lote de 10 é bom, mas requer paciência no polling
 const BATCH_SIZE = 10; 
 
 interface SubmissionError {
@@ -15,7 +15,6 @@ interface SubmissionError {
   stderr: string;
 }
 
-// Função auxiliar para esperar (delay) entre lotes para não levar block da API
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
 export async function POST(request: Request) {
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
 
     const problemData = problemDoc.data();
     
-    // Mapa de Pontuação das Subtarefas
+    // Mapeia Subtask ID para Score
     const subtaskScores = new Map<number, number>();
     let totalPossibleScore = 0;
 
@@ -51,36 +50,40 @@ export async function POST(request: Request) {
         totalPossibleScore = 100;
     }
 
-    // --- 2. Busca Casos de Teste ---
+    // --- 2. Prepara Submissões ---
     const testsSnapshot = await problemDocRef.collection('test_cases').get();
-    if (testsSnapshot.empty) {
+    let testDocs: any[] = [];
+    
+    if (!testsSnapshot.empty) {
+        testDocs = testsSnapshot.docs.map(doc => doc.data());
+    } else if (problemData?.testCases) {
+        testDocs = problemData.testCases;
+    } else {
         return NextResponse.json({ error: 'Sem casos de teste.' }, { status: 500 });
     }
 
-    // Ordena para garantir que o índice 0 seja o teste 1, etc.
-    let testDocs = testsSnapshot.docs.map(doc => doc.data());
+    // Ordena
     testDocs.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-    // Prepara todos os objetos de submissão
+    // Prepara payload
     const allSubmissionsPayload = testDocs.map(data => ({
         source_code: source_code,
         language_id: language_id,
-        stdin: data.input || "",
-        expected_output: data.output || "",
-        cpu_time_limit: 2, 
+        stdin: data.input || data.inputs || data.stdin || "",
+        expected_output: data.output || data.outputs || data.expected_output || "",
+        cpu_time_limit: 5, // Aumentei para garantir
         memory_limit: 128000 
     }));
 
-    // --- DIVISÃO EM CHUNKS (Mantida, mas usada diferente) ---
+    // Divide em lotes
     const chunks = [];
     for (let i = 0; i < allSubmissionsPayload.length; i += BATCH_SIZE) {
         chunks.push(allSubmissionsPayload.slice(i, i + BATCH_SIZE));
     }
 
-    console.log(`🚀 Disparando ${chunks.length} lotes em PARALELO...`);
+    console.log(`🚀 Disparando ${chunks.length} lotes em PARALELO (${allSubmissionsPayload.length} testes)...`);
 
-    // --- 3. ENVIO PARALELO (A Grande Mudança) ---
-    // Criamos um array de Promessas. O fetch acontece INSTANTANEAMENTE para todos.
+    // --- 3. Envio e Polling Inteligente ---
     const promises = chunks.map(async (chunk, idx) => {
         try {
             // Envia o lote
@@ -93,48 +96,55 @@ export async function POST(request: Request) {
             if (!res.ok) throw new Error(`Status ${res.status}`);
 
             let data = await res.json();
-            
-            // Lógica de Polling Individual para cada lote (caso o wait=true não resolva)
-            // É importante que cada "thread" cuide do seu próprio polling
-            if (Array.isArray(data) && data.length > 0 && data[0].token && !data[0].status) {
-                const tokens = data.map((r: any) => r.token).join(',');
-                let attempts = 0;
-                // Polling rápido (máx 5s)
-                while (attempts < 5) {
-                    await new Promise(r => setTimeout(r, 1000));
-                    attempts++;
-                    const pollRes = await fetch(`${JUDGE0_URL}/submissions/batch?tokens=${tokens}&base64_encoded=false&fields=status,time,memory,stderr,compile_output`, { method: 'GET' });
+            // Normaliza resposta (Judge0 pode retornar array direto ou objeto)
+            let submissions = Array.isArray(data) ? data : (data.submissions || []);
+
+            // --- CORREÇÃO CRÍTICA AQUI ---
+            // Verifica se ALGUÉM ainda está processando (Status <= 2 ou null)
+            const needsPolling = submissions.some((s: any) => !s.status || s.status.id <= 2);
+
+            if (needsPolling) {
+                console.log(`⏳ Lote ${idx + 1}: Polling necessário...`);
+                const tokens = submissions.map((r: any) => r.token).join(',');
+                
+                // Tenta por até 20 segundos (10 x 2s)
+                for (let attempt = 1; attempt <= 10; attempt++) {
+                    await sleep(2000); 
+                    
+                    const pollRes = await fetch(`${JUDGE0_URL}/submissions/batch?tokens=${tokens}&base64_encoded=false&fields=status,time,memory,stderr,compile_output,message`, { method: 'GET' });
+                    
                     if (!pollRes.ok) continue;
+
                     const pollData = await pollRes.json();
-                    if (pollData.submissions.every((s: any) => s.status && s.status.id >= 3)) {
-                        data = pollData.submissions;
+                    
+                    // Atualiza a variável com os dados MAIS RECENTES
+                    if (pollData.submissions) {
+                        submissions = pollData.submissions;
+                    }
+
+                    // Se todos terminaram (Status >= 3), podemos sair
+                    if (submissions.every((s: any) => s.status && s.status.id >= 3)) {
                         break;
                     }
                 }
             }
             
-            // Retorna os resultados normatizados
-            return Array.isArray(data) ? data : (data as any).submissions || [];
-        } catch (err) {
+            return submissions;
+
+        } catch (err: any) {
             console.error(`Erro no lote ${idx}:`, err);
-            // Retorna um array de erros para não quebrar o Promise.all inteiro
-            // Isso simula que todos os testes desse lote falharam
             return chunk.map(() => ({
-                status: { id: 6, description: "Runtime Error (Judge Error)" },
-                stderr: "Erro de comunicação com o juiz."
+                status: { id: 13, description: "Internal Error" },
+                stderr: `Erro na API: ${err.message}`
             }));
         }
     });
 
-    // O Promise.all espera TODAS as requisições terminarem.
-    // O tempo total será igual ao tempo do lote mais lento, não a soma de todos.
     const resultsArrays = await Promise.all(promises);
-
-    // "Aplaina" o array de arrays em um único array de resultados
     const allResults = resultsArrays.flat();
 
-    // --- 4. Análise de Resultados (Agora usando allResults) ---
-    console.log(`📝 Calculando pontuação baseada em ${allResults.length} resultados...`);
+    // --- 4. Processamento ---
+    console.log(`📝 Analisando ${allResults.length} resultados...`);
 
     const subtaskStatus = new Map<number, boolean>();
     subtaskScores.forEach((_, id) => subtaskStatus.set(id, true));
@@ -143,36 +153,39 @@ export async function POST(request: Request) {
     let maxMemory = 0;
     let firstError: SubmissionError | null = null;
 
-    // Importante: Como processamos sequencialmente, a ordem de allResults deve bater com testDocs
     for (let index = 0; index < allResults.length; index++) {
         const res = allResults[index];
-        const testCase = testDocs[index]; // Pega o caso de teste original correspondente
-
-        if (!testCase) continue; // Segurança
+        const testCase = testDocs[index];
+        if (!testCase) continue;
 
         const subId = testCase.subtask_id || 0;
 
         if (res.time && parseFloat(res.time) > maxTime) maxTime = parseFloat(res.time);
         if (res.memory && res.memory > maxMemory) maxMemory = res.memory;
 
-        const isAccepted = res.status && res.status.id === 3;
+        // Status 3 = Accepted
+        const isAccepted = res.status?.id === 3;
 
         if (!isAccepted) {
-            // Se UM teste da subtask falhar, a subtask inteira falha
             subtaskStatus.set(subId, false);
 
             if (!firstError) {
+                const desc = res.status?.description || "Erro Desconhecido (Timeout)";
+                const log = res.stderr || res.compile_output || res.message || "Sem logs disponíveis";
+                
+                console.log(`❌ Falha no teste ${index + 1}: ${desc}`);
+                
                 firstError = {
                     status: "Erro",
-                    status_description: res.status?.description || "Erro",
+                    status_description: desc,
                     failed_at: index + 1,
-                    stderr: res.stderr || res.compile_output || res.message || ""
+                    stderr: log
                 };
             }
         }
     }
 
-    // Calcula Nota Final
+    // Calcula Nota
     let finalScore = 0;
     const subtasksDetail: any[] = [];
     const sortedIds = Array.from(subtaskScores.keys()).sort((a, b) => a - b);
@@ -181,56 +194,93 @@ export async function POST(request: Request) {
         const passed = subtaskStatus.get(id) || false;
         const score = subtaskScores.get(id) || 0;
         if (passed) finalScore += score;
-
-        subtasksDetail.push({
-            id: id,
-            score: score,
-            passed: passed
-        });
+        subtasksDetail.push({ id, score, passed });
     });
 
-    // --- VEREDITO ---
+    // Veredito
     let verdict = "Wrong Answer";
+    if (finalScore === totalPossibleScore && totalPossibleScore > 0) verdict = "Accepted";
+    else if (finalScore > 0) verdict = "Partial";
 
-    if (finalScore === totalPossibleScore && totalPossibleScore > 0) {
-        verdict = "Accepted";
-    } else if (finalScore > 0) {
-        verdict = "Partial";
-    }
-    
-    if (finalScore === 0 && firstError && firstError.status_description.includes("Compilation")) {
-        verdict = "Compilation Error";
+    // Refinamento do erro
+    if (finalScore === 0 && firstError) {
+        if (firstError.status_description.includes("Compilation")) verdict = "Compilation Error";
+        else if (firstError.status_description.includes("Runtime")) verdict = "Runtime Error";
     }
 
-    console.log(`📊 Resultado Final: ${verdict} (${finalScore}/${totalPossibleScore})`);
+    console.log(`📊 Resultado Final: ${verdict} (${finalScore} pts)`);
 
-    // --- 5. PERSISTÊNCIA NO FIRESTORE (Código Mantido) ---
+    // --- 5. Persistência ---
     if (uid) {
-        // ... (Mantive sua lógica de persistência igual)
         try {
-            const userSubmissionRef = db.collection('users').doc(uid).collection('submissions').doc(slug);
-            const existingDoc = await userSubmissionRef.get();
-            const previousData = existingDoc.exists ? existingDoc.data() : null;
-            const previousScore = previousData?.score || 0;
+            const userRef = db.collection('users').doc(uid);
+            const bestRef = userRef.collection('submissions').doc(slug);
+            const latestRef = userRef.collection('latest').doc(slug);
+            const historyRef = userRef.collection('history').doc();
 
-            if (!existingDoc.exists || finalScore > previousScore) {
-                console.log(`💾 Salvando novo recorde para ${uid}...`);
-                await userSubmissionRef.set({
+            const bestDoc = await bestRef.get();
+            const previousBestScore = bestDoc.exists ? bestDoc.data()?.score || 0 : 0;
+
+            let scoreDelta = 0;
+            let solvedDelta = 0;
+            let isNewRecord = false;
+
+            if (finalScore > previousBestScore) {
+                isNewRecord = true;
+                scoreDelta = finalScore - previousBestScore;
+                if (finalScore === 100 && previousBestScore < 100) solvedDelta = 1;
+            }
+
+            const batch = db.batch();
+
+            batch.set(userRef, {
+                lastActive: Timestamp.now(),
+                totalSubmissions: FieldValue.increment(1),
+                rankingScore: FieldValue.increment(scoreDelta),
+                problemsSolved: FieldValue.increment(solvedDelta)
+            }, { merge: true });
+
+            if (isNewRecord || !bestDoc.exists) {
+                batch.set(bestRef, {
                     problemId: slug,
                     score: finalScore,
                     totalPossible: totalPossibleScore,
                     status: verdict,
                     language: language_id,
-                    submittedAt: new Date(),
-                    code: source_code
+                    submittedAt: Timestamp.now(),
+                    code: source_code,
+                    time: maxTime,
+                    memory: maxMemory
                 }, { merge: true });
             }
-        } catch (dbError) {
-            console.error("Erro ao salvar no BD:", dbError);
+
+            batch.set(latestRef, {
+                problemId: slug,
+                score: finalScore,
+                status: verdict,
+                language: language_id,
+                submittedAt: Timestamp.now(),
+                code: source_code
+            });
+
+            batch.set(historyRef, {
+                problemId: slug,
+                score: finalScore,
+                totalPossible: totalPossibleScore,
+                status: verdict,
+                statusDescription: firstError?.status_description || verdict,
+                language: language_id,
+                submittedAt: Timestamp.now(),
+                time: maxTime,
+                memory: maxMemory
+            });
+
+            await batch.commit();
+        } catch (dbErr) {
+            console.error("Erro no DB:", dbErr);
         }
     }
 
-    // --- RETORNO ---
     return NextResponse.json({
         ...(firstError || {}),
         status: verdict,

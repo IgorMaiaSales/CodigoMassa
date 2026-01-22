@@ -1,41 +1,110 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import Link from 'next/link'; // Importante para a navegação
+import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import { ChevronDown, RotateCcw, Send, Terminal, AlertCircle, CheckCircle, AlertTriangle, XCircle, Check, Lock, LogIn } from 'lucide-react';
 import { useAuth } from '@/lib/contexts/AuthContext'; 
+import Editor from '@monaco-editor/react';
 
+// Definição das linguagens suportadas
 const LANGUAGES = [
-  { id: 71, name: 'Python 3', suffix: '.py', placeholder: "def main():\n    print('Ola Mundo')\n\nif __name__ == '__main__':\n    main()" },
-  { id: 54, name: 'C++ (GCC 9.2.0)', suffix: '.cpp', placeholder: "#include <iostream>\n\nint main() {\n    std::cout << \"Ola Mundo\";\n    return 0;\n}" },
-  { id: 50, name: 'C (GCC 9.2.0)', suffix: '.c', placeholder: "#include <stdio.h>\n\nint main() {\n    printf(\"Ola Mundo\");\n    return 0;\n}" },
-  { id: 62, name: 'Java (OpenJDK 13.0.1)', suffix: '.java', placeholder: "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Ola Mundo\");\n    }\n}" },
-  { id: 63, name: 'JavaScript (Node.js)', suffix: '.js', placeholder: "console.log('Ola Mundo');" },
-  { id: 67, name: 'Pascal (FPC 3.0.4)', suffix: '.pas', placeholder: "program Hello;\nbegin\n  writeln('Ola Mundo');\nend." },
+  { id: 71, name: 'Python 3', suffix: '.py', monaco: 'python', placeholder: "def main():\n    print('Ola Mundo')\n\nif __name__ == '__main__':\n    main()" },
+  { id: 54, name: 'C++ (GCC 9.2.0)', suffix: '.cpp', monaco: 'cpp', placeholder: "#include <iostream>\n\nint main() {\n    std::cout << \"Ola Mundo\";\n    return 0;\n}" },
+  { id: 50, name: 'C (GCC 9.2.0)', suffix: '.c', monaco: 'c', placeholder: "#include <stdio.h>\n\nint main() {\n    printf(\"Ola Mundo\");\n    return 0;\n}" },
+  { id: 62, name: 'Java (OpenJDK 13.0.1)', suffix: '.java', monaco: 'java', placeholder: "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Ola Mundo\");\n    }\n}" },
+  { id: 63, name: 'JavaScript (Node.js)', suffix: '.js', monaco: 'javascript', placeholder: "console.log('Ola Mundo');" },
+  { id: 67, name: 'Pascal (FPC 3.0.4)', suffix: '.pas', monaco: 'pascal', placeholder: "program Hello;\nbegin\n  writeln('Ola Mundo');\nend." },
 ];
+
+// Função auxiliar para achar a linguagem do Monaco baseada no ID atual
+const getMonacoLanguage = (id: number) => {
+    const lang = LANGUAGES.find(l => l.id === id);
+    return lang ? lang.monaco : 'plaintext';
+}
 
 interface CodeEditorProps {
   problemSlug: string;
 }
 
+// Componente principal do editor de código
 export default function CodeEditor({ problemSlug }: CodeEditorProps) {
-  // Apenas consumimos o estado do usuário, sem funções de login
   const { user, loading: authLoading } = useAuth();
   const isAuthenticated = !!user;
 
+  // Estados do componente
   const [selectedLang, setSelectedLang] = useState(LANGUAGES[0]);
   const [code, setCode] = useState('');
   const [isLangMenuOpen, setIsLangMenuOpen] = useState(false);
   const [consoleOutput, setConsoleOutput] = useState<React.ReactNode | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [isLoaded, setIsLoaded] = useState(false);
-  
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const lineNumbersRef = useRef<HTMLDivElement>(null);
 
-  // --- LÓGICA DE CACHE (LocalStorage) ---
+  const langStorageKey = `obi_last_lang_${problemSlug}`;
+  const codeStorageKey = `obi_cache_${problemSlug}_${selectedLang.id}`;
+
+  // Carrega a linguagem salva no localStorage ao mudar de problema
+  useEffect(() => {
+    const savedLangId = localStorage.getItem(langStorageKey);
+    if (savedLangId) {
+        const foundLang = LANGUAGES.find(l => l.id === Number(savedLangId));
+        if (foundLang) {
+            setSelectedLang(foundLang);
+        }
+    }
+  }, [problemSlug, langStorageKey]);
+
+  // Recupera o código salvo no localStorage ao mudar de problema ou linguagem
+  useEffect(() => {
+    setIsLoaded(false); // Trava o salvamento automático
+    const savedCode = localStorage.getItem(codeStorageKey);
+    
+    if (savedCode) {
+      setCode(savedCode);
+    } else {
+      setCode(selectedLang.placeholder);
+    }
+    
+    // Libera o salvamento após carregar
+    const timer = setTimeout(() => setIsLoaded(true), 100);
+    return () => clearTimeout(timer);
+  }, [problemSlug, selectedLang.id, codeStorageKey]);
+
+  // Salva a linguagem selecionada no localStorage
+  useEffect(() => {
+    if (isLoaded) {
+      const timeoutId = setTimeout(() => {
+        localStorage.setItem(codeStorageKey, code);
+      }, 500);
+      return () => clearTimeout(timeoutId);
+    }
+  }, [code, isLoaded, codeStorageKey]);
+
+  // Define o tema customizado do Monaco Editor
+  const handleEditorWillMount = (monaco: any) => {
+    monaco.editor.defineTheme('codemassa-theme', {
+      base: 'vs-dark',
+      inherit: true,
+      rules: [
+        { token: 'comment', foreground: '8CA69E', fontStyle: 'italic' },
+        { token: 'keyword', foreground: '6BBF99', fontStyle: 'bold' },
+        { token: 'string', foreground: 'D4B04C' },
+        { token: 'number', foreground: '4A6F8A' },
+        { token: 'type', foreground: '4A6F8A' },
+      ],
+      colors: {
+        'editor.background': '#0F1A18',
+        'editor.foreground': '#EAEAEA',
+        'editor.lineHighlightBackground': '#182B27',
+        'editorCursor.foreground': '#6BBF99',
+        'editorLineNumber.foreground': '#2A453F',
+        'editorLineNumber.activeForeground': '#6BBF99',
+      }
+    });
+  };
+
   const storageKey = `obi_cache_${problemSlug}_${selectedLang.id}`;
 
+  // Carrega o código salvo no localStorage ao mudar de problema ou linguagem
   useEffect(() => {
     setIsLoaded(false);
     const savedCode = localStorage.getItem(storageKey);
@@ -49,6 +118,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
     setTimeout(() => setIsLoaded(true), 50);
   }, [problemSlug, selectedLang.id, storageKey]);
 
+  // Salva o código no localStorage com debounce
   useEffect(() => {
     if (isLoaded) {
       const timeoutId = setTimeout(() => {
@@ -57,73 +127,53 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
       return () => clearTimeout(timeoutId);
     }
   }, [code, isLoaded, storageKey]);
-  // -------------------------------------
 
+  // Fecha o menu de linguagens ao clicar fora
   useEffect(() => {
     const close = () => setIsLangMenuOpen(false);
     if(isLangMenuOpen) window.addEventListener('click', close);
     return () => window.removeEventListener('click', close);
   }, [isLangMenuOpen]);
 
-  const handleScroll = () => {
-    if (lineNumbersRef.current && textareaRef.current) {
-      lineNumbersRef.current.scrollTop = textareaRef.current.scrollTop;
-    }
-  };
-  
-  const lineCount = code.split('\n').length;
-  const lineNumbers = Array.from({ length: lineCount }, (_, i) => i + 1);
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Tab') {
-      e.preventDefault();
-      const start = e.currentTarget.selectionStart;
-      const end = e.currentTarget.selectionEnd;
-      const value = e.currentTarget.value;
-      setCode(value.substring(0, start) + "    " + value.substring(end));
-      setTimeout(() => {
-        if (textareaRef.current) textareaRef.current.selectionStart = textareaRef.current.selectionEnd = start + 4;
-      }, 0);
-    }
-  };
-
+  // Função para mudar a linguagem selecionada
   const handleLanguageChange = (lang: typeof LANGUAGES[0]) => {
+    // Salva a preferência de linguagem para este problema específico
+    localStorage.setItem(langStorageKey, String(lang.id));
+    
     setSelectedLang(lang);
     setIsLangMenuOpen(false);
   };
 
+  // Função para submeter o código
   const handleSubmit = async () => {
     if (!problemSlug) return;
     
-    // Bloqueio de Segurança: Feedback visual no Console se tentar forçar o envio
+    // Verifica se o usuário está autenticado
     if (!isAuthenticated) {
-      setConsoleOutput(
-        <div className="flex flex-col items-start gap-3 text-brand-yellow p-4 bg-brand-yellow/5 border border-brand-yellow/20 rounded">
-          <div className="flex items-center gap-2">
-            <Lock size={18} />
-            <span className="text-xs font-mono font-bold">Autenticação necessária</span>
-          </div>
-          <p className="text-xs opacity-80">Você precisa estar logado para processar sua submissão.</p>
-          <Link 
-            href="/login"
-            className="text-xs bg-brand-yellow text-brand-dark font-bold px-3 py-1 rounded hover:opacity-90 transition inline-block"
-          >
-            Ir para página de Login
-          </Link>
-        </div>
-      );
+        setConsoleOutput(
+            <div className="flex flex-col items-start gap-3 text-brand-yellow p-4 bg-brand-yellow/5 border border-brand-yellow/20 rounded">
+              <div className="flex items-center gap-2">
+                <Lock size={18} />
+                <span className="text-xs font-mono font-bold">Autenticação necessária</span>
+              </div>
+              <p className="text-xs opacity-80">Você precisa estar logado para processar sua submissão.</p>
+              <Link href="/login" className="text-xs bg-brand-yellow text-brand-dark font-bold px-3 py-1 rounded hover:opacity-90 transition inline-block">
+                Ir para página de Login
+              </Link>
+            </div>
+          );
       return;
     }
 
+    // Inicia o processo de submissão
     setIsRunning(true);
     setConsoleOutput(null);
 
+    // Chama a API de submissão
     try {
       const response = await fetch('/api/submit', {
         method: 'POST',
-        headers: { 
-            'Content-Type': 'application/json',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           slug: problemSlug,
           source_code: code,
@@ -137,19 +187,20 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
       renderResult(result);
 
     } catch (error: any) {
-      setConsoleOutput(
-        <div className="flex items-center gap-2 text-brand-error p-4">
-          <AlertCircle size={18} />
-          <span className="text-xs font-mono">{error.message || "Erro de conexão"}</span>
-        </div>
-      );
+        // Exibe o erro na console output
+        setConsoleOutput(
+            <div className="flex items-center gap-2 text-brand-error p-4">
+              <AlertCircle size={18} />
+              <span className="text-xs font-mono">{error.message || "Erro de conexão"}</span>
+            </div>
+          );
     } finally {
       setIsRunning(false);
     }
   };
 
+  // Função para renderizar o resultado da submissão
   const renderResult = (data: any) => {
-    // Mesma lógica de renderização
     let bgColor = "bg-brand-surface";
     let borderColor = "border-brand-border";
     let icon = <Terminal size={20} />;
@@ -176,6 +227,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
         title = data.status_description || "Resposta Incorreta";
     }
 
+    // Monta o console output com base no resultado
     setConsoleOutput(
       <div className="animate-fade-in p-2 space-y-3">
         <div className={`flex items-start gap-3 p-3 rounded-lg border ${bgColor} ${borderColor}`}>
@@ -240,6 +292,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
     );
   };
 
+  // Renderização do componente
   return (
     <div className="flex-1 flex flex-col bg-brand-panel relative min-w-0 h-full border-l border-brand-border">
       
@@ -276,7 +329,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
             onClick={() => {
               if (confirm('Isso irá apagar seu código atual. Deseja continuar?')) {
                 setCode(selectedLang.placeholder);
-                localStorage.removeItem(storageKey);
+                localStorage.removeItem(codeStorageKey);
               }
             }} 
             className="p-1.5 rounded-lg hover:bg-brand-border text-brand-muted hover:text-white transition" 
@@ -310,7 +363,7 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
         </div>
       </div>
 
-      {/* AVISO DE LOGIN (Link para página de login) */}
+      {/* AVISO DE LOGIN */}
       {!isAuthenticated && !authLoading && (
         <div className="bg-brand-yellow/10 border-b border-brand-yellow/20 px-4 py-2 flex items-center justify-between animate-in slide-in-from-top-2">
             <div className="flex items-center gap-2">
@@ -319,7 +372,6 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
                     Você não está logado. O código está salvo localmente, mas não poderá ser enviado.
                 </p>
             </div>
-            {/* Agora é um Link do Next.js, não mais um botão com função */}
             <Link 
                 href="/login"
                 className="flex items-center gap-1 text-xs text-brand-yellow hover:text-brand-yellow/80 font-bold underline"
@@ -330,23 +382,28 @@ export default function CodeEditor({ problemSlug }: CodeEditorProps) {
         </div>
       )}
 
-      {/* EDITOR */}
-      <div className="flex-1 relative flex flex-col min-h-0 bg-brand-dark">
-        <div className="flex-1 flex overflow-hidden">
-          <div ref={lineNumbersRef} className="w-10 py-4 text-right pr-2 font-mono text-xs text-brand-muted/40 select-none bg-brand-dark overflow-hidden border-r border-brand-border/50">
-            {lineNumbers.map(n => <div key={n} className="leading-6">{n}</div>)}
-          </div>
-          <textarea 
-            ref={textareaRef} 
-            value={code} 
-            onChange={(e) => setCode(e.target.value)} 
-            onKeyDown={handleKeyDown} 
-            onScroll={handleScroll} 
-            className="flex-1 bg-transparent text-brand-text caret-brand-green-light outline-none resize-none font-mono text-sm leading-6 p-4 whitespace-pre border-none focus:ring-0" 
-            spellCheck="false" 
-            autoComplete="off" 
-          />
-        </div>
+      {/* --- EDITOR MONACO --- */}
+      <div className="flex-1 relative flex flex-col min-h-0 bg-brand-dark pt-2">
+         <Editor
+            height="100%"
+            theme="codemassa-theme"
+            language={selectedLang.monaco}
+            value={code}
+            beforeMount={handleEditorWillMount}
+            onChange={(value) => setCode(value || "")}
+            options={{
+                minimap: { enabled: false },
+                fontSize: 14,
+                lineNumbers: 'on',
+                scrollBeyondLastLine: false,
+                automaticLayout: true,
+                padding: { top: 16, bottom: 16 },
+                fontFamily: "'JetBrains Mono', 'Fira Code', monospace", 
+                fontLigatures: true,
+                cursorBlinking: 'smooth',
+                smoothScrolling: true,
+            }}
+         />
       </div>
 
       {/* CONSOLE */}
