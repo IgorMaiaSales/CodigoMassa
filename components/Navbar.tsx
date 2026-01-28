@@ -6,7 +6,7 @@ import { LogOut, LayoutGrid, List, Trophy, BookOpen, Menu, X, LogIn } from 'luci
 import { signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore'; 
 import { auth, firestore } from '@/lib/firebase'; 
-import { HorizontalLogo } from './Logo'; // <--- Trazendo a Logo de volta
+import { HorizontalLogo } from './Logo';
 import Link from 'next/link';
 
 // Função auxiliar de Patente
@@ -18,6 +18,7 @@ const getRankTitle = (score: number = 0) => {
     return 'Mestre';
 };
 
+// Componente Navbar
 export default function Navbar() {
   const router = useRouter(); 
   const pathname = usePathname(); 
@@ -52,7 +53,7 @@ export default function Navbar() {
 
   const handleLoginRedirect = () => {
     setIsMenuOpen(false); 
-    router.push('/login'); 
+    router.push('/auth/login'); 
   };
 
   const handleLogout = async () => {

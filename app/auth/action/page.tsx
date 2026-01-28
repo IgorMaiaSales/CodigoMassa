@@ -14,7 +14,7 @@ function AuthActionHandler() {
     const apiKey = searchParams.get('apiKey');
 
     if (!mode || !oobCode) {
-      router.push('/login'); // Link inválido, manda pro login
+      router.push('/auth/login'); // Link inválido, manda pro login
       return;
     }
 
@@ -24,13 +24,13 @@ function AuthActionHandler() {
     // Redireciona baseado no modo
     switch (mode) {
       case 'resetPassword':
-        router.replace(`/reset-password${query}`);
+        router.replace(`/auth/reset-password${query}`);
         break;
       case 'verifyEmail':
-        router.replace(`/verify-email${query}`);
+        router.replace(`/auth/verify-email${query}`);
         break;
       default:
-        router.push('/login');
+        router.push('/auth/login');
     }
   }, [searchParams, router]);
 

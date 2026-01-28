@@ -98,7 +98,7 @@ export default function FormComponent() {
             <div className="space-y-2">
                 <div className="flex justify-between items-center">
                     <label htmlFor="password" className="text-sm font-medium text-brand-text">Senha</label>
-                    <Link href="/forgot" className="text-xs font-medium text-brand-blue hover:text-brand-greenLight transition-colors">Esqueceu a senha?</Link>
+                    <Link href="/auth/forgot" className="text-xs font-medium text-brand-blue hover:text-brand-greenLight transition-colors">Esqueceu a senha?</Link>
                 </div>
                 <div className="relative group">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
