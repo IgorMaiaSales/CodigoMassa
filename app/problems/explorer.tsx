@@ -1,7 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-// 1. Adicionado ChevronLeft e ChevronRight nos imports
+import React, { useState, useEffect, useMemo } from 'react';
 import { Search, Filter, ChevronDown, CheckCircle, CircleDashed, AlertTriangle, XCircle, ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { ProblemSummary } from '@/types/problem';
@@ -19,7 +18,7 @@ export default function ProblemExplorer() {
   const [filterLevel, setFilterLevel] = useState('Todos');
   const [filterPhase, setFilterPhase] = useState('Todos');
 
-  // 2. Novos Estados para Paginação
+  // Estados para Paginação
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10;
 
@@ -28,7 +27,6 @@ export default function ProblemExplorer() {
     const fetchProblems = async () => {
       setLoading(true);
       try {
-        // ... (código de busca mantém igual) ...
         const params = new URLSearchParams();
         if (filterYear !== 'Todos') params.append('year', filterYear);
         if (filterLevel !== 'Todos') params.append('level', filterLevel);
@@ -63,30 +61,33 @@ export default function ProblemExplorer() {
     setCurrentPage(1);
   }, [searchTerm, filterYear, filterLevel, filterPhase]);
 
+  // --- LÓGICA DE ANOS DINÂMICOS ---
+  const availableYears = useMemo(() => {
+    // Mapeia todos os anos e converte para string
+    const years = problems.map(prob => prob.year.toString());
+    // Remove duplicatas com Set e ordena de forma decrescente (ex: 2026, 2025, 2024)
+    return Array.from(new Set(years)).sort((a, b) => b.localeCompare(a));
+  }, [problems]);
+
   // --- LÓGICA DE FILTRAGEM E PAGINAÇÃO ---
-  
-  // 1. Filtra
   const filteredProblems = problems.filter(prob => {
     const term = searchTerm.toLowerCase();
     return prob.title.toLowerCase().includes(term);
   });
 
-  // 2. Calcula índices
   const indexOfLastItem = currentPage * ITEMS_PER_PAGE;
   const indexOfFirstItem = indexOfLastItem - ITEMS_PER_PAGE;
   const totalPages = Math.ceil(filteredProblems.length / ITEMS_PER_PAGE);
 
-  // 3. Fatia o array (Estes são os problemas que aparecerão na tela)
   const currentProblems = filteredProblems.slice(indexOfFirstItem, indexOfLastItem);
 
-  // Funções auxiliares (formatLevel e getScoreBadge mantêm iguais)
-  const formatLevel = (levels: string[]) => { /* ... código existente ... */ 
+  const formatLevel = (levels: string[]) => { 
     const map: Record<string, string> = { 'J': 'Júnior', '1': 'Nível 1', '2': 'Nível 2', 'S': 'Sênior', 'Iniciante': 'Iniciante' };
     if (!levels || !Array.isArray(levels)) return 'Nível desconhecido';
     return levels.map(l => map[l] || l).join(' / ');
   };
 
-  const getScoreBadge = (problemId: string) => { /* ... código existente ... */ 
+  const getScoreBadge = (problemId: string) => { 
     const submission = userProgress[problemId];
     if (!submission) return <div className="flex items-center gap-2 text-[#8CA69E] opacity-40"><CircleDashed size={18} /><span className="text-xs font-medium hidden md:inline">Não tentado</span></div>;
     if (submission.status === 'Accepted') return <div className="flex items-center gap-2 text-brand-green-light bg-brand-green/10 px-3 py-1 rounded-full border border-brand-green/20"><CheckCircle size={16} /><span className="text-sm font-bold">{submission.score} pts</span></div>;
@@ -97,9 +98,8 @@ export default function ProblemExplorer() {
   return (
     <div className="space-y-8">
       
-      {/* --- BARRA DE FILTROS (MANTÉM IGUAL) --- */}
+      {/* --- BARRA DE FILTROS --- */}
       <div className="bg-[#13201E] border border-[#2A453F] rounded-xl p-4 shadow-xl">
-        {/* ... (Todo o conteúdo da barra de filtros permanece igual) ... */}
          <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
              {/* Busca */}
              <div className="md:col-span-5 relative group">
@@ -114,12 +114,13 @@ export default function ProblemExplorer() {
                     className="block w-full pl-10 pr-3 py-2.5 bg-[#0F1A18] border border-[#2A453F] rounded-lg text-[#EAEAEA] placeholder-[#8CA69E]/50 focus:ring-1 focus:ring-[#3A7D63] focus:border-[#3A7D63] outline-none transition-all"
                 />
             </div>
-             {/* Ano */}
+             {/* Ano (Gerado Dinamicamente) */}
              <div className="md:col-span-2 relative">
                 <select value={filterYear} onChange={(e) => setFilterYear(e.target.value)} className="block w-full pl-3 pr-8 py-2.5 bg-[#0F1A18] border border-[#2A453F] rounded-lg text-[#EAEAEA] appearance-none focus:ring-1 focus:ring-[#3A7D63] outline-none cursor-pointer">
                     <option value="Todos">Ano: Todos</option>
-                    <option value="2025">2025</option>
-                    <option value="2024">2024</option>
+                    {availableYears.map(year => (
+                        <option key={year} value={year}>{year}</option>
+                    ))}
                 </select>
                 <ChevronDown className="absolute right-3 top-3 h-4 w-4 text-[#8CA69E] pointer-events-none" />
             </div>
@@ -165,7 +166,6 @@ export default function ProblemExplorer() {
                       <p>Carregando problemas...</p>
                   </div>
               ) : filteredProblems.length > 0 ? (
-                  // IMPORTANTE: Aqui usamos 'currentProblems' em vez de 'filteredProblems'
                   currentProblems.map((prob) => (
                       <Link 
                           key={prob.id}
@@ -204,7 +204,7 @@ export default function ProblemExplorer() {
           </div>
       </div>
 
-      {/* --- PAGINAÇÃO (NOVA SEÇÃO) --- */}
+      {/* --- PAGINAÇÃO --- */}
       {!loading && filteredProblems.length > 0 && (
           <div className="flex items-center justify-between px-2 pt-2">
               <p className="text-sm text-[#8CA69E]">
@@ -220,19 +220,15 @@ export default function ProblemExplorer() {
                       <ChevronLeft size={18} />
                   </button>
                   
-                  {/* Indicador de Páginas (Corrigido) */}
                   <div className="flex items-center gap-1">
                       {(() => {
-                          // Lógica segura para calcular intervalo de páginas (Ex: 1..5, 4..8)
                           let startPage = Math.max(1, currentPage - 2);
                           let endPage = Math.min(totalPages, startPage + 4);
 
-                          // Se estivermos no final (ex: pag 10 de 10), empurra o início para trás para manter 5 botões
                           if (endPage - startPage < 4) {
                               startPage = Math.max(1, endPage - 4);
                           }
 
-                          // Gera o array de números
                           const pages = [];
                           for (let i = startPage; i <= endPage; i++) {
                               pages.push(i);
